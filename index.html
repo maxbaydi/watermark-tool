@@ -234,6 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="arialmt.ttf">Arial</option>
                 <option value="RobotoCondensed-Regular.ttf">Roboto Condensed Regular</option>
             `;
+            // Обновляем превью после установки fallback шрифтов
+            setTimeout(updatePreview, 100);
         }
     }
 
@@ -531,7 +533,18 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(error => {
             console.error('Ошибка:', error);
-            resultDiv.innerHTML = `<p class="text-red-600">Произошла ошибка: ${error.message}</p>`;
+            let errorMessage = error.message;
+            
+            // Более детальные сообщения об ошибках
+            if (error.message.includes('500')) {
+                errorMessage = 'Ошибка сервера. Проверьте логи сервера или обратитесь к администратору.';
+            } else if (error.message.includes('413')) {
+                errorMessage = 'Файл слишком большой. Уменьшите размер изображения.';
+            } else if (error.message.includes('404')) {
+                errorMessage = 'Сервер не найден. Проверьте настройки веб-сервера.';
+            }
+            
+            resultDiv.innerHTML = `<p class="text-red-600">Произошла ошибка: ${errorMessage}</p>`;
         })
         .finally(() => {
             loader.classList.add('hidden');

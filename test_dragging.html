@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест перетаскивания - Мастер Водяных Знаков</title>
+    <script src="https://unpkg.com/draggabilly@3/dist/draggabilly.pkgd.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-container { 
+            width: 400px; 
+            height: 300px; 
+            border: 2px solid #ccc; 
+            position: relative; 
+            background: #f0f4f8;
+            margin: 20px auto;
+        }
+        .draggable { 
+            position: absolute; 
+            background: rgba(59, 130, 246, 0.8); 
+            color: white; 
+            padding: 10px; 
+            cursor: move; 
+            border-radius: 5px;
+            user-select: none;
+        }
+        .guide-line {
+            position: absolute;
+            background-color: rgba(255, 0, 0, 0.5);
+            display: none;
+            z-index: 9;
+        }
+        #guide-y {
+            width: 1px;
+            height: 100%;
+            left: 50%;
+            top: 0;
+        }
+        #guide-x {
+            width: 100%;
+            height: 1px;
+            top: 50%;
+            left: 0;
+        }
+        .info { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 5px; 
+            margin: 20px 0; 
+        }
+        .coordinates { 
+            background: #e9ecef; 
+            padding: 10px; 
+            border-radius: 3px; 
+            font-family: monospace; 
+            margin: 10px 0; 
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Тест перетаскивания водяных знаков</h1>
+    
+    <div class="info">
+        <h3>Инструкция:</h3>
+        <ul>
+            <li>Перетащите синий блок в любом направлении</li>
+            <li>При приближении к центру появится красная направляющая линия</li>
+            <li>Координаты обновляются в реальном времени</li>
+            <li>Координаты передаются в относительном формате (0-1)</li>
+        </ul>
+    </div>
+
+    <div class="test-container">
+        <div id="guide-y" class="guide-line"></div>
+        <div id="guide-x" class="guide-line"></div>
+        <div id="draggable" class="draggable">
+            Водяной знак
+        </div>
+    </div>
+
+    <div class="coordinates">
+        <strong>Координаты:</strong><br>
+        X: <span id="coord-x">0.5</span><br>
+        Y: <span id="coord-y">0.5</span><br>
+        Позиция: <span id="position">Центр</span>
+    </div>
+
+    <div class="info">
+        <h3>Результат теста:</h3>
+        <div id="test-result">Ожидание...</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.querySelector('.test-container');
+            const draggable = document.getElementById('draggable');
+            const guideY = document.getElementById('guide-y');
+            const guideX = document.getElementById('guide-x');
+            const coordX = document.getElementById('coord-x');
+            const coordY = document.getElementById('coord-y');
+            const position = document.getElementById('position');
+            const testResult = document.getElementById('test-result');
+
+            let draggie = new Draggabilly(draggable, {
+                containment: container
+            });
+
+            // Устанавливаем начальную позицию по центру
+            const containerRect = container.getBoundingClientRect();
+            const draggableRect = draggable.getBoundingClientRect();
+            const centerX = (containerRect.width - draggableRect.width) / 2;
+            const centerY = (containerRect.height - draggableRect.height) / 2;
+            
+            draggie.setPosition(centerX, centerY);
+            updateCoordinates();
+
+            function updateCoordinates() {
+                const containerRect = container.getBoundingClientRect();
+                const draggableRect = draggable.getBoundingClientRect();
+                const x = draggie.position.x;
+                const y = draggie.position.y;
+                
+                // Рассчитываем координаты центра водяного знака
+                const centerX = x + (draggableRect.width / 2);
+                const centerY = y + (draggableRect.height / 2);
+                
+                const relativeX = centerX / containerRect.width;
+                const relativeY = centerY / containerRect.height;
+                
+                coordX.textContent = relativeX.toFixed(4);
+                coordY.textContent = relativeY.toFixed(4);
+                
+                // Определяем позицию
+                let posText = '';
+                if (relativeX < 0.2) posText += 'Лево ';
+                else if (relativeX > 0.8) posText += 'Право ';
+                else if (Math.abs(relativeX - 0.5) < 0.1) posText += 'Центр ';
+                
+                if (relativeY < 0.2) posText += 'Верх';
+                else if (relativeY > 0.8) posText += 'Низ';
+                else if (Math.abs(relativeY - 0.5) < 0.1) posText += 'Центр';
+                
+                position.textContent = posText || 'Свободная позиция';
+            }
+
+            function handleDragMove() {
+                const containerRect = container.getBoundingClientRect();
+                const draggableRect = draggable.getBoundingClientRect();
+                const draggieX = draggie.position.x;
+                const draggieY = draggie.position.y;
+
+                const watermarkCenterX = draggieX + (draggableRect.width / 2);
+                const watermarkCenterY = draggieY + (draggableRect.height / 2);
+                const containerCenterX = containerRect.width / 2;
+                const containerCenterY = containerRect.height / 2;
+
+                const snapThreshold = 10;
+
+                const isNearHorizontalCenter = Math.abs(watermarkCenterX - containerCenterX) < snapThreshold;
+                const isNearVerticalCenter = Math.abs(watermarkCenterY - containerCenterY) < snapThreshold;
+
+                if (isNearHorizontalCenter) {
+                    guideY.style.display = 'block';
+                } else {
+                    guideY.style.display = 'none';
+                }
+
+                if (isNearVerticalCenter) {
+                    guideX.style.display = 'block';
+                } else {
+                    guideX.style.display = 'none';
+                }
+            }
+
+            draggie.on('dragMove', () => {
+                handleDragMove();
+                updateCoordinates();
+            });
+
+            draggie.on('dragEnd', () => {
+                guideX.style.display = 'none';
+                guideY.style.display = 'none';
+                updateCoordinates();
+                
+                // Проверяем корректность координат
+                const x = parseFloat(coordX.textContent);
+                const y = parseFloat(coordY.textContent);
+                
+                if (x >= 0 && x <= 1 && y >= 0 && y <= 1) {
+                    testResult.innerHTML = '<span style="color: green;">✅ Тест пройден! Координаты корректны.</span>';
+                } else {
+                    testResult.innerHTML = '<span style="color: red;">❌ Ошибка! Координаты вне диапазона 0-1.</span>';
+                }
+            });
+
+            // Тестируем различные позиции
+            setTimeout(() => {
+                console.log('Тестирование различных позиций...');
+                
+                // Тест 1: Верхний левый угол
+                draggie.setPosition(0, 0);
+                setTimeout(() => {
+                    const x = parseFloat(coordX.textContent);
+                    const y = parseFloat(coordY.textContent);
+                    console.log('Верхний левый угол:', x, y);
+                    
+                    // Тест 2: Центр
+                    draggie.setPosition(centerX, centerY);
+                    setTimeout(() => {
+                        const x = parseFloat(coordX.textContent);
+                        const y = parseFloat(coordY.textContent);
+                        console.log('Центр:', x, y);
+                        
+                        // Тест 3: Нижний правый угол
+                        const maxX = containerRect.width - draggableRect.width;
+                        const maxY = containerRect.height - draggableRect.height;
+                        draggie.setPosition(maxX, maxY);
+                        setTimeout(() => {
+                            const x = parseFloat(coordX.textContent);
+                            const y = parseFloat(coordY.textContent);
+                            console.log('Нижний правый угол:', x, y);
+                            
+                            // Возвращаем в центр
+                            draggie.setPosition(centerX, centerY);
+                        }, 1000);
+                    }, 1000);
+                }, 1000);
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
