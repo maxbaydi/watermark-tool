@@ -174,24 +174,19 @@ function apply_text_watermark(&$image, $settings) {
     // Отладочная информация для размера шрифта
     file_put_contents('debug.log', "DEBUG: Размер шрифта из настроек: " . (isset($settings['fontSize']) ? $settings['fontSize'] : 'НЕ УСТАНОВЛЕН') . "\n", FILE_APPEND);
     
-    // Масштабируем размер шрифта относительно оригинального изображения
+    // Масштабируем размер шрифта относительно текущего изображения
     $previewWidth = isset($settings['preview_width']) ? intval($settings['preview_width']) : 0;
-    $previewHeight = isset($settings['preview_height']) ? intval($settings['preview_height']) : 0;
-    $originalWidth = isset($settings['original_width']) ? intval($settings['original_width']) : 0;
-    $originalHeight = isset($settings['original_height']) ? intval($settings['original_height']) : 0;
-    
     $baseFontSize = isset($settings['fontSize']) ? intval($settings['fontSize']) : 48;
-    
-    // Рассчитываем масштаб
+
     $scale = 1.0;
-    if ($previewWidth > 0 && $originalWidth > 0) {
-        $scale = $originalWidth / $previewWidth;
+    if ($previewWidth > 0) {
+        $scale = $image->getImageWidth() / $previewWidth;
     }
-    
+
     $fontSize = intval($baseFontSize * $scale);
-    
-    file_put_contents('debug.log', "DEBUG: Размер превью: {$previewWidth}x{$previewHeight}\n", FILE_APPEND);
-    file_put_contents('debug.log', "DEBUG: Размер оригинала: {$originalWidth}x{$originalHeight}\n", FILE_APPEND);
+
+    file_put_contents('debug.log', "DEBUG: Размер превью: {$previewWidth}\n", FILE_APPEND);
+    file_put_contents('debug.log', "DEBUG: Размер изображения: " . $image->getImageWidth() . "x" . $image->getImageHeight() . "\n", FILE_APPEND);
     file_put_contents('debug.log', "DEBUG: Масштаб: {$scale}\n", FILE_APPEND);
     file_put_contents('debug.log', "DEBUG: Базовый размер шрифта: {$baseFontSize}\n", FILE_APPEND);
     file_put_contents('debug.log', "DEBUG: Применяемый размер шрифта: {$fontSize}\n", FILE_APPEND);
@@ -213,15 +208,21 @@ function apply_text_watermark(&$image, $settings) {
         $centerX = floatval($settings['watermark_x']) * $image->getImageWidth();
         $centerY = floatval($settings['watermark_y']) * $image->getImageHeight();
         
+        // Подготавливаем текст и кодировку
+        $text = $settings['text'];
+        if (!mb_check_encoding($text, 'UTF-8')) {
+            $text = mb_convert_encoding($text, 'UTF-8', 'auto');
+        }
+
         // Получаем размеры текста для центрирования
-        $metrics = $image->queryFontMetrics($draw, $settings['text']);
+        $metrics = $image->queryFontMetrics($draw, $text);
         $textWidth = $metrics['textWidth'];
         $textHeight = $metrics['ascender'] + $metrics['descender'];
-        
+
         // Рассчитываем координаты левого верхнего угла текста для центрирования
         $x = $centerX - ($textWidth / 2);
         $y = $centerY + ($textHeight / 2) - $metrics['descender'];
-        
+
         $draw->setTextAlignment(Imagick::ALIGN_LEFT);
 
         // Добавляем тень
@@ -232,15 +233,8 @@ function apply_text_watermark(&$image, $settings) {
             $image->annotateImage($shadowDraw, $x + 2, $y + 2, 0, $text);
         }
 
-        // Обрабатываем текст с правильной кодировкой для спецсимволов
-        $text = $settings['text'];
-        // Убеждаемся, что текст в UTF-8
-        if (!mb_check_encoding($text, 'UTF-8')) {
-            $text = mb_convert_encoding($text, 'UTF-8', 'auto');
-        }
-        
         file_put_contents('debug.log', "DEBUG: Текст для наложения: " . $text . "\n", FILE_APPEND);
-        
+
         $image->annotateImage($draw, $x, $y, 0, $text);
     }
 }
