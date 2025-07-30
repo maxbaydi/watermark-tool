@@ -165,8 +165,10 @@ function apply_text_watermark(&$image, $settings) {
         $draw->setFont('Arial');
     } else {
         file_put_contents('debug.log', "УСПЕХ: Файл шрифта найден: " . $font_path . "\n", FILE_APPEND);
+        // Помогаем ImageMagick находить шрифты
+        putenv('GDFONTPATH=' . FONT_DIR);
         $draw->setFont($font_path);
-        
+
         // Устанавливаем кодировку для правильного отображения спецсимволов
         $draw->setTextEncoding('UTF-8');
     }
@@ -207,35 +209,27 @@ function apply_text_watermark(&$image, $settings) {
     if (isset($settings['watermark_x']) && isset($settings['watermark_y'])) {
         $centerX = floatval($settings['watermark_x']) * $image->getImageWidth();
         $centerY = floatval($settings['watermark_y']) * $image->getImageHeight();
-        
+
         // Подготавливаем текст и кодировку
         $text = $settings['text'];
         if (!mb_check_encoding($text, 'UTF-8')) {
             $text = mb_convert_encoding($text, 'UTF-8', 'auto');
         }
 
-        // Получаем размеры текста для центрирования
-        $metrics = $image->queryFontMetrics($draw, $text);
-        $textWidth = $metrics['textWidth'];
-        $textHeight = $metrics['ascender'] + $metrics['descender'];
-
-        // Рассчитываем координаты левого верхнего угла текста для центрирования
-        $x = $centerX - ($textWidth / 2);
-        $y = $centerY + ($textHeight / 2) - $metrics['descender'];
-
-        $draw->setTextAlignment(Imagick::ALIGN_LEFT);
+        // Центрируем текст с помощью гравитации
+        $draw->setGravity(Imagick::GRAVITY_CENTER);
 
         // Добавляем тень
         if (isset($settings['textShadow']) && $settings['textShadow'] === 'on') {
             $shadowDraw = clone $draw;
             $shadowDraw->setFillColor('black');
             $shadowDraw->setFillAlpha(floatval($settings['textOpacity']) * 0.5);
-            $image->annotateImage($shadowDraw, $x + 2, $y + 2, 0, $text);
+            $image->annotateImage($shadowDraw, $centerX + 2, $centerY + 2, 0, $text);
         }
 
         file_put_contents('debug.log', "DEBUG: Текст для наложения: " . $text . "\n", FILE_APPEND);
 
-        $image->annotateImage($draw, $x, $y, 0, $text);
+        $image->annotateImage($draw, $centerX, $centerY, 0, $text);
     }
 }
 

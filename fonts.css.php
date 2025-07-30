@@ -62,4 +62,4 @@ foreach ($fonts as $font) {
     echo "    font-style: normal;\n";
     echo "}\n\n";
 }
-?> 
+?>
