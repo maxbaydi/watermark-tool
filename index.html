@@ -72,6 +72,14 @@
                     <input type="hidden" id="preview_height" name="preview_height" value="">
                     <input type="hidden" id="original_width" name="original_width" value="">
                     <input type="hidden" id="original_height" name="original_height" value="">
+                    <!-- Новые поля для точного позиционирования -->
+                    <input type="hidden" id="watermark_width_preview" name="watermark_width_preview" value="">
+                    <input type="hidden" id="watermark_height_preview" name="watermark_height_preview" value="">
+                    <input type="hidden" id="watermark_center_x_preview" name="watermark_center_x_preview" value="">
+                    <input type="hidden" id="watermark_center_y_preview" name="watermark_center_y_preview" value="">
+                    <!-- Поля для процентных размеров -->
+                    <input type="hidden" id="fontSizePercent" name="fontSizePercent" value="">
+                    <input type="hidden" id="watermarkSizePercent" name="watermarkSizePercent" value="">
 
                     <div class="control-group">
                         <h2 class="text-xl font-bold mb-4">1. Загрузите изображения</h2>
@@ -103,8 +111,8 @@
                                 <input type="checkbox" id="textShadow" name="textShadow" class="h-5 w-5 text-blue-600 rounded">
                                 <label for="textShadow" class="ml-2">Тень</label>
                             </div>
-                            <label class="block mt-4 mb-2">Размер: <span id="fontSizeValue">48</span>px</label>
-                            <input type="range" id="fontSize" name="fontSize" min="10" max="200" value="48" class="w-full">
+                            <label class="block mt-4 mb-2">Размер: <span id="fontSizeValue">7.5</span>% от ширины</label>
+                            <input type="range" id="fontSize" name="fontSize" min="0.5" max="25" value="7.5" step="0.1" class="w-full">
                             <label class="block mt-4 mb-2">Прозрачность: <span id="textOpacityValue">0.7</span></label>
                             <input type="range" id="textOpacity" name="textOpacity" min="0" max="1" value="0.7" step="0.05" class="w-full">
                             <label class="block mt-4 mb-2">Цвет:</label>
@@ -113,8 +121,8 @@
                         <div id="imageControls" class="hidden">
                             <label for="watermarkImageUpload" class="block mb-2">Загрузите файл (PNG):</label>
                             <input type="file" id="watermarkImageUpload" name="watermark_image" accept="image/png" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                            <label class="block mt-4 mb-2">Размер: <span id="watermarkSizeValue">0.25</span> от ширины</label>
-                            <input type="range" id="watermarkSize" name="watermarkSize" min="0.05" max="1" value="0.25" step="0.01" class="w-full">
+                            <label class="block mt-4 mb-2">Размер: <span id="watermarkSizeValue">25</span>% от ширины</label>
+                            <input type="range" id="watermarkSize" name="watermarkSize" min="5" max="100" value="25" step="1" class="w-full">
                             <label class="block mt-4 mb-2">Прозрачность: <span id="watermarkOpacityValue">0.8</span></label>
                             <input type="range" id="watermarkOpacity" name="watermarkOpacity" min="0" max="1" value="0.8" step="0.05" class="w-full">
                         </div>
@@ -294,43 +302,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const watermarkType = document.querySelector('input[name="watermarkType"]:checked').value;
 
+        // Всегда актуализируем скрытые поля для передачи на сервер
+        document.getElementById('original_width').value = baseImage.naturalWidth;
+        document.getElementById('original_height').value = baseImage.naturalHeight;
+        document.getElementById('preview_width').value = baseImagePreview.width;
+        document.getElementById('preview_height').value = baseImagePreview.height;
+
         if (watermarkType === 'text') {
             watermarkImagePreview.style.display = 'none';
             watermarkTextPreview.style.display = 'block';
-            
-            // Получаем название шрифта из текста опции для корректного отображения в браузере
+
+            // Получаем название шрифта для CSS и файл для PHP
             const selectedFontFamily = fontSelect.options[fontSelect.selectedIndex].text;
-            // Используем название шрифта напрямую, так как теперь шрифты загружаются через CSS
             const fontFamily = `"${selectedFontFamily}", sans-serif`;
             watermarkTextPreview.style.fontFamily = fontFamily;
-            console.log('Применяем шрифт:', fontFamily);
-            console.log('Значение шрифта для PHP:', fontSelect.value);
             watermarkTextPreview.innerText = watermarkText.value;
             watermarkTextPreview.style.fontWeight = fontWeightCheckbox.checked ? 'bold' : 'normal';
             watermarkTextPreview.style.textShadow = textShadowCheckbox.checked ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none';
-            watermarkTextPreview.style.fontSize = `${fontSize.value}px`;
+
+            // Размер шрифта в процентах от ширины превью
+            const fontSizePercent = parseFloat(fontSize.value);
+            const previewFontSize = (fontSizePercent / 100 * baseImagePreview.width);
+            watermarkTextPreview.style.fontSize = `${previewFontSize}px`;
             watermarkTextPreview.style.color = document.querySelector('input[name="textColor"]:checked').value;
             watermarkTextPreview.style.opacity = textOpacity.value;
             watermarkTextPreview.style.whiteSpace = 'pre';
+
+            // Сохраняем параметры для сервера
+            document.getElementById('fontSizePercent').value = fontSizePercent;
+            fontSelect.name = 'font'; // гарантируем правильное имя
+            fontSelect.value = fontSelect.value; // гарантируем актуальное значение
 
         } else if (watermarkType === 'image' && watermarkImage.src) {
             watermarkTextPreview.style.display = 'none';
             watermarkImagePreview.style.display = 'block';
 
             watermarkImagePreview.src = watermarkImage.src;
-            watermarkImagePreview.style.width = `${baseImagePreview.width * watermarkSize.value}px`;
+            const watermarkSizePercent = parseFloat(watermarkSize.value);
+            const previewWatermarkWidth = (watermarkSizePercent / 100 * baseImagePreview.width);
+            watermarkImagePreview.style.width = `${previewWatermarkWidth}px`;
             watermarkImagePreview.style.opacity = watermarkOpacity.value;
+            document.getElementById('watermarkSizePercent').value = watermarkSizePercent;
         }
-        
+
         document.getElementById('fontSizeValue').textContent = fontSize.value;
         document.getElementById('textOpacityValue').textContent = textOpacity.value;
         document.getElementById('watermarkSizeValue').textContent = watermarkSize.value;
         document.getElementById('watermarkOpacityValue').textContent = watermarkOpacity.value;
-        
+
         // Отладочная информация
-        console.log('Размер шрифта:', fontSize.value);
-        console.log('Прозрачность текста:', textOpacity.value);
-        
+        //console.log('Размер шрифта:', fontSize.value);
+        //console.log('Прозрачность текста:', textOpacity.value);
+
         if (draggie) draggie.destroy();
         initDraggabilly();
     }
@@ -399,16 +422,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const watermarkRect = draggableWatermark.getBoundingClientRect();
         const x = draggie.position.x;
         const y = draggie.position.y;
-        
-        // Рассчитываем координаты центра водяного знака
+
+        // Центр водяного знака в px (относительно контейнера превью)
         const centerX = x + (watermarkRect.width / 2);
         const centerY = y + (watermarkRect.height / 2);
-        
+
+        // Относительные координаты (0-1)
         const relativeX = centerX / containerRect.width;
         const relativeY = centerY / containerRect.height;
-        
+
         watermarkXInput.value = relativeX.toFixed(4);
         watermarkYInput.value = relativeY.toFixed(4);
+
+        // Новые поля:
+        document.getElementById('watermark_width_preview').value = watermarkRect.width.toFixed(2);
+        document.getElementById('watermark_height_preview').value = watermarkRect.height.toFixed(2);
+        document.getElementById('watermark_center_x_preview').value = centerX.toFixed(2);
+        document.getElementById('watermark_center_y_preview').value = centerY.toFixed(2);
     }
 
     // --- Обработчики событий ---
@@ -482,12 +512,23 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         
+        // Валидация на клиенте
         if (!imageUpload.files.length) {
-            alert('Пожалуйста, загрузите хотя бы одно изображение.');
+            showError('Пожалуйста, загрузите хотя бы одно изображение.');
             return;
         }
+        
+        // Проверка размера файлов
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        for (let file of imageUpload.files) {
+            if (file.size > maxSize) {
+                showError(`Файл "${file.name}" превышает максимальный размер 10MB`);
+                return;
+            }
+        }
+        
         if (document.querySelector('input[name="watermarkType"]:checked').value === 'image' && !watermarkImageUpload.files.length) {
-            alert('Пожалуйста, загрузите изображение для водяного знака.');
+            showError('Пожалуйста, загрузите изображение для водяного знака.');
             return;
         }
 
@@ -495,50 +536,88 @@ document.addEventListener('DOMContentLoaded', () => {
         processButton.disabled = true;
         resultDiv.innerHTML = '';
 
+        // Перед отправкой формы ещё раз обновим все скрытые поля (на случай ручных изменений)
+        updatePreview();
+        updateCoordinates();
         const formData = new FormData(form);
-        
-        // Отладочная информация перед отправкой
-        console.log('Отправляем данные формы:');
-        for (let [key, value] of formData.entries()) {
-            console.log(key + ':', value);
+
+        // Явно добавляем имя файла шрифта (важно для PHP)
+        if (fontSelect && fontSelect.value) {
+            formData.set('font', fontSelect.value);
         }
 
         fetch('process.php', { method: 'POST', body: formData })
         .then(response => {
+            const contentType = response.headers.get('content-type');
+            
             if (!response.ok) {
-                return response.text().then(text => { throw new Error(text || 'Ошибка сервера.'); });
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Ошибка сервера');
+                    });
+                }
+                return response.text().then(text => {
+                    throw new Error(text || 'Ошибка сервера');
+                });
             }
+            
+            // Проверяем, что это файл для скачивания
             const disposition = response.headers.get('Content-Disposition');
-            let filename = 'download';
-            if (disposition && disposition.includes('attachment')) {
-                const matches = /filename="([^"]+)"/.exec(disposition);
-                if (matches != null && matches[1]) filename = matches[1];
+            if (!disposition || !disposition.includes('attachment')) {
+                throw new Error('Неверный формат ответа сервера');
             }
+            
+            let filename = 'watermarked_images';
+            const matches = /filename="([^"]+)"/.exec(disposition);
+            if (matches && matches[1]) {
+                filename = matches[1];
+            }
+            
             return response.blob().then(blob => ({ blob, filename }));
         })
         .then(({ blob, filename }) => {
+            // Создаем ссылку для скачивания
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.style.display = 'none'; a.href = url; a.download = filename;
-            document.body.appendChild(a); a.click();
-            window.URL.revokeObjectURL(url); a.remove();
-            resultDiv.innerHTML = `<p class="text-green-600">Готово! Загрузка началась.</p>`;
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
             
-            // Автоматически очищаем временные файлы после скачивания
+            // Очищаем ресурсы
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            }, 100);
+            
+            showSuccess('Готово! Изображения обработаны и загружены.');
+            
+            // Автоматически очищаем временные файлы
             setTimeout(() => {
                 cleanTempFiles();
-            }, 2000); // Задержка 2 секунды, чтобы пользователь успел скачать файл
+            }, 2000);
         })
         .catch(error => {
             console.error('Ошибка:', error);
-            resultDiv.innerHTML = `<p class="text-red-600">Произошла ошибка: ${error.message}</p>`;
+            showError(error.message);
         })
         .finally(() => {
             loader.classList.add('hidden');
             processButton.disabled = false;
         });
     });
+    
+    // Вспомогательные функции для отображения сообщений
+    function showError(message) {
+        resultDiv.innerHTML = `<p class="text-red-600 font-medium">❌ ${message}</p>`;
+    }
+    
+    function showSuccess(message) {
+        resultDiv.innerHTML = `<p class="text-green-600 font-medium">✅ ${message}</p>`;
+    }
 });
 </script>
 </body>
 </html>
+
