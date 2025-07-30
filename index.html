@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Инструмент для наложения водяных знаков</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/draggabilly@3/dist/draggabilly.pkgd.min.js"></script>
+    <link rel="stylesheet" href="fonts.css.php">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        @import url('https://rsms.me/inter/inter.css');
+        .control-group { border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1.5rem; background-color: white; }
+        .loader { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        #preview-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #preview-container { 
+            position: relative; 
+            max-width: 100%;
+            max-height: 100%;
+            overflow: hidden; 
+            background-color: #f0f4f8; 
+            border-radius: 0.375rem;
+            transition: width 0.3s, height 0.3s;
+        }
+        #preview-container img#baseImagePreview { 
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #draggable-watermark { position: absolute; cursor: move; user-select: none; z-index: 10; padding: 5px; box-sizing: border-box; }
+        #draggable-watermark:hover { border: 2px dashed rgba(59, 130, 246, 0.7); }
+
+        /* Стили для направляющих линий */
+        .guide-line {
+            position: absolute;
+            background-color: rgba(255, 0, 0, 0.5);
+            display: none;
+            z-index: 9;
+        }
+        #guide-y { /* Вертикальная линия */
+            width: 1px;
+            height: 100%;
+            left: 50%;
+            top: 0;
+        }
+        #guide-x { /* Горизонтальная линия */
+            width: 100%;
+            height: 1px;
+            top: 50%;
+            left: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-center mb-8">Мастер Водяных Знаков</h1>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <form id="watermarkForm">
+                    <input type="hidden" id="watermark_x" name="watermark_x" value="0.5">
+                    <input type="hidden" id="watermark_y" name="watermark_y" value="0.5">
+                    <input type="hidden" id="preview_width" name="preview_width" value="">
+                    <input type="hidden" id="preview_height" name="preview_height" value="">
+                    <input type="hidden" id="original_width" name="original_width" value="">
+                    <input type="hidden" id="original_height" name="original_height" value="">
+
+                    <div class="control-group">
+                        <h2 class="text-xl font-bold mb-4">1. Загрузите изображения</h2>
+                        <label for="imageUpload" class="block mb-2 font-medium">Выберите файлы (JPG, PNG, GIF, WebP):</label>
+                        <input type="file" id="imageUpload" name="images[]" multiple required accept="image/jpeg,image/png,image/gif,image/webp" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    </div>
+
+                    <div class="control-group">
+                        <h2 class="text-xl font-bold mb-4">2. Выберите тип</h2>
+                        <div class="flex items-center space-x-6">
+                            <label class="flex items-center"><input type="radio" name="watermarkType" value="text" checked class="h-5 w-5 text-blue-600"><span class="ml-2">Текст</span></label>
+                            <label class="flex items-center"><input type="radio" name="watermarkType" value="image" class="h-5 w-5 text-blue-600"><span class="ml-2">Изображение</span></label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h2 class="text-xl font-bold mb-4">3. Настройте знак</h2>
+                        <div id="textControls">
+                            <textarea id="watermarkText" name="text" rows="2" class="w-full p-2 border rounded-md">Ваш Копирайт ©</textarea>
+                             <label for="font" class="block mt-4 mb-2">Шрифт:</label>
+                            <select id="font" name="font" class="w-full p-2 border rounded-md">
+                                <option value="">Загрузка шрифтов...</option>
+                            </select>
+                            <div class="flex items-center mt-4">
+                                <input type="checkbox" id="fontWeight" name="fontWeight" class="h-5 w-5 text-blue-600 rounded">
+                                <label for="fontWeight" class="ml-2">Жирный</label>
+                            </div>
+                            <div class="flex items-center mt-4">
+                                <input type="checkbox" id="textShadow" name="textShadow" class="h-5 w-5 text-blue-600 rounded">
+                                <label for="textShadow" class="ml-2">Тень</label>
+                            </div>
+                            <label class="block mt-4 mb-2">Размер: <span id="fontSizeValue">48</span>px</label>
+                            <input type="range" id="fontSize" name="fontSize" min="10" max="200" value="48" class="w-full">
+                            <label class="block mt-4 mb-2">Прозрачность: <span id="textOpacityValue">0.7</span></label>
+                            <input type="range" id="textOpacity" name="textOpacity" min="0" max="1" value="0.7" step="0.05" class="w-full">
+                            <label class="block mt-4 mb-2">Цвет:</label>
+                            <div class="flex space-x-4"><label><input type="radio" name="textColor" value="white" checked> Белый</label><label><input type="radio" name="textColor" value="black"> Черный</label></div>
+                        </div>
+                        <div id="imageControls" class="hidden">
+                            <label for="watermarkImageUpload" class="block mb-2">Загрузите файл (PNG):</label>
+                            <input type="file" id="watermarkImageUpload" name="watermark_image" accept="image/png" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                            <label class="block mt-4 mb-2">Размер: <span id="watermarkSizeValue">0.25</span> от ширины</label>
+                            <input type="range" id="watermarkSize" name="watermarkSize" min="0.05" max="1" value="0.25" step="0.01" class="w-full">
+                            <label class="block mt-4 mb-2">Прозрачность: <span id="watermarkOpacityValue">0.8</span></label>
+                            <input type="range" id="watermarkOpacity" name="watermarkOpacity" min="0" max="1" value="0.8" step="0.05" class="w-full">
+                        </div>
+                    </div>
+                     <div class="control-group">
+                        <h2 class="text-xl font-bold mb-4 text-center">4. Расположение</h2>
+                        <p class="text-center text-gray-600">Перетащите водяной знак на предпросмотре.</p>
+                    </div>
+
+                    <div class="mt-8">
+                         <button type="submit" id="processButton" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300 disabled:bg-gray-400">Обработать и скачать</button>
+                    </div>
+                    
+                    <div class="mt-4 text-center">
+                        <button type="button" id="cleanTempButton" class="text-sm text-gray-500 hover:text-gray-700 underline">Очистить временные файлы</button>
+                    </div>
+                </form>
+                <div id="loader" class="hidden mx-auto mt-4 loader"></div>
+                <div id="result" class="mt-4 text-center"></div>
+            </div>
+            <div id="preview-wrapper" class="bg-white p-6 rounded-lg shadow-lg min-h-[400px] md:min-h-full">
+                <div id="preview-container">
+                    <img id="baseImagePreview" src="" alt="" class="hidden">
+                    <div id="guide-y" class="guide-line"></div>
+                    <div id="guide-x" class="guide-line"></div>
+                    <div id="draggable-watermark">
+                        <img id="watermarkImagePreview" src="" alt="">
+                        <span id="watermarkTextPreview"></span>
+                    </div>
+                    <p id="previewPlaceholder" class="text-gray-400 text-center">Здесь будет предпросмотр</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Получение элементов ---
+    const form = document.getElementById('watermarkForm');
+    const imageUpload = document.getElementById('imageUpload');
+    const watermarkTypeRadios = document.querySelectorAll('input[name="watermarkType"]');
+    
+    // Загружаем список шрифтов
+    loadFonts();
+    
+    // Автоматически очищаем старые временные файлы при загрузке страницы
+    setTimeout(() => {
+        cleanTempFiles();
+    }, 1000);
+    
+    // Элементы управления
+    const textControls = document.getElementById('textControls');
+    const imageControls = document.getElementById('imageControls');
+    const watermarkText = document.getElementById('watermarkText');
+    const fontSelect = document.getElementById('font');
+    const fontWeightCheckbox = document.getElementById('fontWeight');
+    const textShadowCheckbox = document.getElementById('textShadow');
+    const fontSize = document.getElementById('fontSize');
+    const textOpacity = document.getElementById('textOpacity');
+    const textColorRadios = document.querySelectorAll('input[name="textColor"]');
+    const watermarkImageUpload = document.getElementById('watermarkImageUpload');
+    const watermarkSize = document.getElementById('watermarkSize');
+    const watermarkOpacity = document.getElementById('watermarkOpacity');
+
+    // Элементы предпросмотра
+    const previewWrapper = document.getElementById('preview-wrapper');
+    const previewContainer = document.getElementById('preview-container');
+    const baseImagePreview = document.getElementById('baseImagePreview');
+    const draggableWatermark = document.getElementById('draggable-watermark');
+    const watermarkImagePreview = document.getElementById('watermarkImagePreview');
+    const watermarkTextPreview = document.getElementById('watermarkTextPreview');
+    const previewPlaceholder = document.getElementById('previewPlaceholder');
+    const guideY = document.getElementById('guide-y');
+    const guideX = document.getElementById('guide-x');
+
+    // Скрытые поля для координат
+    const watermarkXInput = document.getElementById('watermark_x');
+    const watermarkYInput = document.getElementById('watermark_y');
+    
+    // Кнопки и индикаторы
+    const processButton = document.getElementById('processButton');
+    const loader = document.getElementById('loader');
+    const resultDiv = document.getElementById('result');
+
+    let draggie = null;
+    let baseImage = new Image();
+    let watermarkImage = new Image();
+
+    // --- Функции ---
+    
+    async function loadFonts() {
+        try {
+            const response = await fetch('get_fonts.php');
+            const fonts = await response.json();
+            
+            const fontSelect = document.getElementById('font');
+            fontSelect.innerHTML = '';
+            
+            fonts.forEach(font => {
+                const option = document.createElement('option');
+                option.value = font.file;
+                option.textContent = font.name;
+                fontSelect.appendChild(option);
+            });
+            
+            // Устанавливаем первый шрифт по умолчанию
+            if (fonts.length > 0) {
+                fontSelect.value = fonts[0].file;
+                // Обновляем превью после загрузки шрифтов
+                setTimeout(updatePreview, 100);
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки шрифтов:', error);
+            // Устанавливаем fallback шрифты
+            const fontSelect = document.getElementById('font');
+            fontSelect.innerHTML = `
+                <option value="arialmt.ttf">Arial</option>
+                <option value="RobotoCondensed-Regular.ttf">Roboto Condensed Regular</option>
+            `;
+        }
+    }
+
+    async function cleanTempFiles() {
+        try {
+            const response = await fetch('clean_temp.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                console.log(`Очищено ${result.cleaned_count} временных файлов`);
+                if (result.errors.length > 0) {
+                    console.warn('Ошибки при очистке:', result.errors);
+                }
+            } else {
+                console.error('Ошибка очистки временных файлов:', result.message);
+            }
+        } catch (error) {
+            console.error('Ошибка при очистке временных файлов:', error);
+        }
+    }
+
+    function resizePreviewContainer() {
+        if (!baseImage.src) return;
+
+        const wrapperWidth = previewWrapper.clientWidth;
+        const wrapperHeight = previewWrapper.clientHeight;
+        const imgRatio = baseImage.naturalWidth / baseImage.naturalHeight;
+        const wrapperRatio = wrapperWidth / wrapperHeight;
+
+        let newWidth, newHeight;
+
+        if (imgRatio > wrapperRatio) {
+            newWidth = wrapperWidth;
+            newHeight = wrapperWidth / imgRatio;
+        } else {
+            newHeight = wrapperHeight;
+            newWidth = wrapperHeight * imgRatio;
+        }
+
+        previewContainer.style.width = `${newWidth}px`;
+        previewContainer.style.height = `${newHeight}px`;
+        
+        // Сохраняем размеры для передачи в PHP
+        document.getElementById('preview_width').value = newWidth;
+        document.getElementById('preview_height').value = newHeight;
+        document.getElementById('original_width').value = baseImage.naturalWidth;
+        document.getElementById('original_height').value = baseImage.naturalHeight;
+    }
+
+    function updatePreview() {
+        if (!baseImage.src) return;
+
+        const watermarkType = document.querySelector('input[name="watermarkType"]:checked').value;
+
+        if (watermarkType === 'text') {
+            watermarkImagePreview.style.display = 'none';
+            watermarkTextPreview.style.display = 'block';
+            
+            // Получаем название шрифта из текста опции для корректного отображения в браузере
+            const selectedFontFamily = fontSelect.options[fontSelect.selectedIndex].text;
+            // Используем название шрифта напрямую, так как теперь шрифты загружаются через CSS
+            const fontFamily = `"${selectedFontFamily}", sans-serif`;
+            watermarkTextPreview.style.fontFamily = fontFamily;
+            console.log('Применяем шрифт:', fontFamily);
+            console.log('Значение шрифта для PHP:', fontSelect.value);
+            watermarkTextPreview.innerText = watermarkText.value;
+            watermarkTextPreview.style.fontWeight = fontWeightCheckbox.checked ? 'bold' : 'normal';
+            watermarkTextPreview.style.textShadow = textShadowCheckbox.checked ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none';
+            watermarkTextPreview.style.fontSize = `${fontSize.value}px`;
+            watermarkTextPreview.style.color = document.querySelector('input[name="textColor"]:checked').value;
+            watermarkTextPreview.style.opacity = textOpacity.value;
+            watermarkTextPreview.style.whiteSpace = 'pre';
+
+        } else if (watermarkType === 'image' && watermarkImage.src) {
+            watermarkTextPreview.style.display = 'none';
+            watermarkImagePreview.style.display = 'block';
+
+            watermarkImagePreview.src = watermarkImage.src;
+            watermarkImagePreview.style.width = `${baseImagePreview.width * watermarkSize.value}px`;
+            watermarkImagePreview.style.opacity = watermarkOpacity.value;
+        }
+        
+        document.getElementById('fontSizeValue').textContent = fontSize.value;
+        document.getElementById('textOpacityValue').textContent = textOpacity.value;
+        document.getElementById('watermarkSizeValue').textContent = watermarkSize.value;
+        document.getElementById('watermarkOpacityValue').textContent = watermarkOpacity.value;
+        
+        // Отладочная информация
+        console.log('Размер шрифта:', fontSize.value);
+        console.log('Прозрачность текста:', textOpacity.value);
+        
+        if (draggie) draggie.destroy();
+        initDraggabilly();
+    }
+    
+    function initDraggabilly() {
+        if (!baseImage.src) return;
+
+        draggie = new Draggabilly(draggableWatermark, {
+            containment: previewContainer
+        });
+
+        // Устанавливаем водяной знак по центру контейнера
+        const containerRect = previewContainer.getBoundingClientRect();
+        const watermarkRect = draggableWatermark.getBoundingClientRect();
+        
+        // Позиционируем так, чтобы центр водяного знака был в центре контейнера
+        const centerX = (containerRect.width - watermarkRect.width) / 2;
+        const centerY = (containerRect.height - watermarkRect.height) / 2;
+        
+        draggie.setPosition(centerX, centerY);
+        updateCoordinates();
+
+        draggie.on('dragMove', handleDragMove);
+        draggie.on('dragEnd', () => {
+            guideX.style.display = 'none';
+            guideY.style.display = 'none';
+            updateCoordinates();
+        });
+    }
+
+    function handleDragMove() {
+        const containerRect = previewContainer.getBoundingClientRect();
+        const watermarkRect = draggableWatermark.getBoundingClientRect();
+        const draggieX = draggie.position.x;
+        const draggieY = draggie.position.y;
+
+        const watermarkCenterX = draggieX + (watermarkRect.width / 2);
+        const watermarkCenterY = draggieY + (watermarkRect.height / 2);
+        const containerCenterX = containerRect.width / 2;
+        const containerCenterY = containerRect.height / 2;
+
+        const snapThreshold = 10;
+
+        const isNearHorizontalCenter = Math.abs(watermarkCenterX - containerCenterX) < snapThreshold;
+        const isNearVerticalCenter = Math.abs(watermarkCenterY - containerCenterY) < snapThreshold;
+
+        if (isNearHorizontalCenter) {
+            // Привязываем к вертикальной центральной линии
+            draggie.position.x = containerCenterX - (watermarkRect.width / 2);
+            guideY.style.display = 'block';
+        } else {
+            guideY.style.display = 'none';
+        }
+
+        if (isNearVerticalCenter) {
+            // Привязываем к горизонтальной центральной линии
+            draggie.position.y = containerCenterY - (watermarkRect.height / 2);
+            guideX.style.display = 'block';
+        } else {
+            guideX.style.display = 'none';
+        }
+    }
+    
+    function updateCoordinates() {
+        const containerRect = previewContainer.getBoundingClientRect();
+        const watermarkRect = draggableWatermark.getBoundingClientRect();
+        const x = draggie.position.x;
+        const y = draggie.position.y;
+        
+        // Рассчитываем координаты центра водяного знака
+        const centerX = x + (watermarkRect.width / 2);
+        const centerY = y + (watermarkRect.height / 2);
+        
+        const relativeX = centerX / containerRect.width;
+        const relativeY = centerY / containerRect.height;
+        
+        watermarkXInput.value = relativeX.toFixed(4);
+        watermarkYInput.value = relativeY.toFixed(4);
+    }
+
+    // --- Обработчики событий ---
+
+    imageUpload.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                baseImage.onload = () => {
+                    baseImagePreview.src = baseImage.src;
+                    baseImagePreview.classList.remove('hidden');
+                    previewPlaceholder.style.display = 'none';
+                    resizePreviewContainer();
+                    // Даем небольшую задержку, чтобы CSS успел примениться
+                    setTimeout(updatePreview, 50);
+                };
+                baseImage.src = event.target.result;
+            }
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+    
+    window.addEventListener('resize', () => {
+        resizePreviewContainer();
+        updatePreview();
+    });
+
+    watermarkImageUpload.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                watermarkImage.onload = updatePreview;
+                watermarkImage.src = event.target.result;
+            }
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+    
+    form.addEventListener('input', updatePreview);
+    
+    // Обработчик изменения шрифта
+    fontSelect.addEventListener('change', (e) => {
+        console.log('Выбран шрифт:', e.target.value, 'Название:', e.target.options[e.target.selectedIndex].text);
+        updatePreview();
+    });
+    
+    // Обработчик кнопки очистки временных файлов
+    document.getElementById('cleanTempButton').addEventListener('click', async () => {
+        const button = document.getElementById('cleanTempButton');
+        const originalText = button.textContent;
+        
+        button.textContent = 'Очистка...';
+        button.disabled = true;
+        
+        await cleanTempFiles();
+        
+        button.textContent = 'Очищено!';
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.disabled = false;
+        }, 2000);
+    });
+    
+    watermarkTypeRadios.forEach(radio => radio.addEventListener('change', (e) => {
+        const isText = e.target.value === 'text';
+        textControls.classList.toggle('hidden', !isText);
+        imageControls.classList.toggle('hidden', isText);
+        updatePreview();
+    }));
+    
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        
+        if (!imageUpload.files.length) {
+            alert('Пожалуйста, загрузите хотя бы одно изображение.');
+            return;
+        }
+        if (document.querySelector('input[name="watermarkType"]:checked').value === 'image' && !watermarkImageUpload.files.length) {
+            alert('Пожалуйста, загрузите изображение для водяного знака.');
+            return;
+        }
+
+        loader.classList.remove('hidden');
+        processButton.disabled = true;
+        resultDiv.innerHTML = '';
+
+        const formData = new FormData(form);
+        
+        // Отладочная информация перед отправкой
+        console.log('Отправляем данные формы:');
+        for (let [key, value] of formData.entries()) {
+            console.log(key + ':', value);
+        }
+
+        fetch('process.php', { method: 'POST', body: formData })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => { throw new Error(text || 'Ошибка сервера.'); });
+            }
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = 'download';
+            if (disposition && disposition.includes('attachment')) {
+                const matches = /filename="([^"]+)"/.exec(disposition);
+                if (matches != null && matches[1]) filename = matches[1];
+            }
+            return response.blob().then(blob => ({ blob, filename }));
+        })
+        .then(({ blob, filename }) => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none'; a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click();
+            window.URL.revokeObjectURL(url); a.remove();
+            resultDiv.innerHTML = `<p class="text-green-600">Готово! Загрузка началась.</p>`;
+            
+            // Автоматически очищаем временные файлы после скачивания
+            setTimeout(() => {
+                cleanTempFiles();
+            }, 2000); // Задержка 2 секунды, чтобы пользователь успел скачать файл
+        })
+        .catch(error => {
+            console.error('Ошибка:', error);
+            resultDiv.innerHTML = `<p class="text-red-600">Произошла ошибка: ${error.message}</p>`;
+        })
+        .finally(() => {
+            loader.classList.add('hidden');
+            processButton.disabled = false;
+        });
+    });
+});
+</script>
+</body>
+</html>
