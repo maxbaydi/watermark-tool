@@ -41,9 +41,15 @@ function handle_request() {
     // Отладочная информация
     file_put_contents('debug.log', "DEBUG: Все POST параметры: " . print_r($_POST, true) . "\n", FILE_APPEND);
     file_put_contents('debug.log', "DEBUG: Все FILES параметры: " . print_r($_FILES, true) . "\n", FILE_APPEND);
-    if ($settings['watermarkType'] === 'text' && isset($settings['font']) && !file_exists(FONT_DIR . '/' . $settings['font'])) {
-        http_response_code(500);
-        die('Ошибка сервера: Файл шрифта не найден.');
+    
+    // Проверяем наличие шрифта для текстовых водяных знаков
+    if ($settings['watermarkType'] === 'text' && isset($settings['font']) && !empty($settings['font'])) {
+        $font_path = FONT_DIR . '/' . $settings['font'];
+        if (!file_exists($font_path)) {
+            file_put_contents('debug.log', "ОШИБКА: Файл шрифта не найден: " . $font_path . "\n", FILE_APPEND);
+            http_response_code(500);
+            die('Ошибка сервера: Файл шрифта не найден.');
+        }
     }
 
     $session_dir = TEMP_BASE_DIR . '/' . uniqid('ws_', true);
@@ -56,7 +62,16 @@ function handle_request() {
     $files = reArrayFiles($_FILES['images']);
 
     foreach ($files as $file) {
-        if ($file['error'] !== UPLOAD_ERR_OK) continue;
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            file_put_contents('debug.log', "ОШИБКА загрузки файла: " . $file['name'] . " - код ошибки: " . $file['error'] . "\n", FILE_APPEND);
+            continue;
+        }
+        
+        // Проверяем размер файла (максимум 50MB)
+        if ($file['size'] > 50 * 1024 * 1024) {
+            file_put_contents('debug.log', "ПРЕДУПРЕЖДЕНИЕ: Файл слишком большой: " . $file['name'] . " (" . round($file['size'] / 1024 / 1024, 2) . "MB)\n", FILE_APPEND);
+            continue;
+        }
 
         try {
             $image = new Imagick($file['tmp_name']);
@@ -78,13 +93,19 @@ function handle_request() {
             if ($settings['watermarkType'] === 'text') {
                 apply_text_watermark($image, $settings);
             } elseif ($settings['watermarkType'] === 'image' && !empty($_FILES['watermark_image'])) {
-                apply_image_watermark($image, $settings, $_FILES['watermark_image']['tmp_name']);
+                // Проверяем водяной знак-изображение
+                if ($_FILES['watermark_image']['error'] !== UPLOAD_ERR_OK) {
+                    file_put_contents('debug.log', "ОШИБКА загрузки водяного знака: код ошибки: " . $_FILES['watermark_image']['error'] . "\n", FILE_APPEND);
+                } else {
+                    apply_image_watermark($image, $settings, $_FILES['watermark_image']['tmp_name']);
+                }
             }
 
             // Санитизация и сохранение
             $original_name = $file['name'];
             $file_ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
             if (!in_array($file_ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'])) {
+                file_put_contents('debug.log', "ПРЕДУПРЕЖДЕНИЕ: Неподдерживаемый формат файла: " . $original_name . "\n", FILE_APPEND);
                 continue; // Пропускаем неподдерживаемые форматы
             }
             $sanitized_name = preg_replace("/[^a-zA-Z0-9._-]/", "_", $original_name);
@@ -207,8 +228,19 @@ function apply_text_watermark(&$image, $settings) {
 
     // Используем координаты перетаскивания
     if (isset($settings['watermark_x']) && isset($settings['watermark_y'])) {
-        $centerX = floatval($settings['watermark_x']) * $image->getImageWidth();
-        $centerY = floatval($settings['watermark_y']) * $image->getImageHeight();
+        $x = floatval($settings['watermark_x']);
+        $y = floatval($settings['watermark_y']);
+        
+        // Проверяем, что координаты в допустимом диапазоне
+        if ($x >= 0 && $x <= 1 && $y >= 0 && $y <= 1) {
+            $centerX = $x * $image->getImageWidth();
+            $centerY = $y * $image->getImageHeight();
+        } else {
+            // Если координаты некорректные, используем центр
+            $centerX = $image->getImageWidth() / 2;
+            $centerY = $image->getImageHeight() / 2;
+            file_put_contents('debug.log', "ПРЕДУПРЕЖДЕНИЕ: Некорректные координаты, используем центр: x={$x}, y={$y}\n", FILE_APPEND);
+        }
 
         // Подготавливаем текст и кодировку
         $text = $settings['text'];
@@ -254,8 +286,19 @@ function apply_image_watermark(&$image, $settings, $watermark_path) {
     
     // Используем координаты перетаскивания
     if (isset($settings['watermark_x']) && isset($settings['watermark_y'])) {
-        $centerX = floatval($settings['watermark_x']) * $main_width;
-        $centerY = floatval($settings['watermark_y']) * $main_height;
+        $x = floatval($settings['watermark_x']);
+        $y = floatval($settings['watermark_y']);
+        
+        // Проверяем, что координаты в допустимом диапазоне
+        if ($x >= 0 && $x <= 1 && $y >= 0 && $y <= 1) {
+            $centerX = $x * $main_width;
+            $centerY = $y * $main_height;
+        } else {
+            // Если координаты некорректные, используем центр
+            $centerX = $main_width / 2;
+            $centerY = $main_height / 2;
+            file_put_contents('debug.log', "ПРЕДУПРЕЖДЕНИЕ: Некорректные координаты для изображения, используем центр: x={$x}, y={$y}\n", FILE_APPEND);
+        }
         
         // Получаем размеры водяного знака для центрирования
         $wm_width = $watermark->getImageWidth();
